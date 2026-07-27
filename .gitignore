@@ -1,0 +1,35 @@
+# Secrets and local configuration
+.env
+.env.*
+!*.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data and databases
+data/
+arcticdb/
+*.parquet
+*.feather
+*.csv
+*.tsv
+*.pkl
+*.pickle
+*.db
+*.sqlite
+*.sqlite3
+*.lmdb
+
+# Logs and local outputs
+*.log
+outputs/
+tmp/
