@@ -1,28 +1,43 @@
-# 新准则三大报表 PIT 下载说明
+# 新准则三大报表PIT下载说明（Parquet版）
 
-## 数据表
+## 输出结构
 
-程序已根据数据库字段核对使用以下三张表：
+程序从财务数据库读取三张表，直接按公告年份保存为分区Parquet，不再使用ArcticDB：
 
-| 报表 | 数据源 | ArcticDB 目标 symbol |
+```text
+data/new_pit/
+├── new_pit_balance/
+│   ├── year=2018/part-20180101-20181231.parquet
+│   └── ...
+├── new_pit_income/
+│   └── year=2018/part-20180101-20181231.parquet
+└── new_pit_cashflow/
+    └── year=2018/part-20180101-20181231.parquet
+```
+
+| 报表 | 数据源 | Parquet数据集 |
 |---|---|---|
 | 资产负债表 | `vw_fdmt_bs_new` | `new_pit_balance` |
 | 利润表 | `vw_fdmt_is_new` | `new_pit_income` |
 | 现金流量表 | `vw_fdmt_cf_new` | `new_pit_cashflow` |
 
-目标 symbol 使用新名称，不会覆盖已有的 `balance`、`income`、`cashflow`。
+## 推荐：在Notebook运行
 
-## 推荐运行方法
+确认当前Python环境可以导入 `pandas`、`pyarrow` 和 `MySQLdb`；如缺少依赖：
 
-先在 `history_data.ipynb` 中运行原有的数据库连接和 ArcticDB 连接代码，确保
-`conn`、`lib` 已存在，然后新建一个单元格：
+```powershell
+python -m pip install -r requirements.txt
+```
+
+先运行 `history_data.ipynb` 中创建数据库连接 `conn` 的单元格。无需创建
+ArcticDB的 `ac` 或 `lib`：
 
 ```python
 from download_new_pit import download_all_new_pit
 
 summary = download_all_new_pit(
     conn=conn,
-    lib=lib,
+    output_dir=r"C:\Users\hyf\Desktop\因子\data\new_pit",
     start_date="2018-01-01",
     end_date="2026-07-27",
     resume=True,
@@ -30,8 +45,32 @@ summary = download_all_new_pit(
 summary
 ```
 
-程序按自然年分段读取，成功写入一个年度后才继续下一年度。重新运行时会读取
-ArcticDB 中已有的最大 `PUBLISH_DATE`，从下一日继续，避免重复追加。
+程序按公告年份逐块读取。每一块先完整写入临时文件，成功后再原子改名，避免中断后
+留下伪装成完整数据的Parquet。`resume=True` 会扫描已有文件的最大
+`PUBLISH_DATE`，从下一日继续。
+
+## PowerShell命令行运行
+
+在当前PowerShell窗口中设置环境变量：
+
+```powershell
+cd "C:\Users\hyf\Desktop\因子"
+
+$env:PIT_DB_HOST = "数据库服务器地址"
+$env:PIT_DB_PORT = "3306"
+$env:PIT_DB_USER = "数据库用户名"
+$env:PIT_DB_PASSWORD = "数据库密码"
+$env:PIT_DB_NAME = "数据库名称"
+$env:PIT_OUTPUT_DIR = "C:\Users\hyf\Desktop\因子\data\new_pit"
+$env:PIT_START_DATE = "2018-01-01"
+$env:PIT_END_DATE = "2026-07-27"
+
+python .\download_new_pit.py
+```
+
+这些变量只在当前PowerShell窗口有效。不要把真实数据库密码写入代码、说明文件或
+提交到GitHub。`PIT_OUTPUT_DIR` 未设置时，程序默认写入脚本旁的
+`data\new_pit`。
 
 ## 数据口径
 
@@ -39,41 +78,38 @@ ArcticDB 中已有的最大 `PUBLISH_DATE`，从下一日继续，避免重复�
 - 只保留年报、一季报、半年报、三季报：`A/Q1/S1/Q3`。
 - 使用证券在公告时点有效的上市及证券类型关系。
 - 保留当前期、比较期和后续修订记录。
-- 保留 `PUBLISH_DATE`、`ACT_PUBTIME`、`UPDATE_TIME` 等 PIT 字段。
-- 以 `PUBLISH_DATE` 作为 ArcticDB 时间索引。
-- 添加 `IS_CURRENT_PERIOD`，用于区分当前期和比较期。
+- 保留 `PUBLISH_DATE`、`ACT_PUBTIME`、`UPDATE_TIME` 等PIT字段。
+- 添加 `IS_CURRENT_PERIOD`，区分当前期与比较期。
+- Parquet使用Zstandard压缩，日期、整数和财务数值统一数据类型。
 
-## PIT 使用注意
+下载数据仍是公告事件表，不能按 `END_DATE` 直接向历史日期回填。因子必须根据
+`ACT_PUBTIME` 判断最早可用交易日。
 
-下载完成的数据仍是“公告事件表”，不能直接按照财报截止日合并到每日行情。
-生成因子时应根据 `ACT_PUBTIME` 确定信息可用日：
+## 检查和读取
 
-- 开盘前公告：可根据策略约定在当日使用。
-- 交易时段或收盘后公告：建议从下一交易日使用。
-- 每个股票、交易日只选择当时已经公开的最新版本。
+```python
+from download_new_pit import read_pit_dataset
 
-不要使用 `END_DATE` 作为信息可用日期，也不要只保留数据库当前的最终版本。
+income = read_pit_dataset(
+    "new_pit_income",
+    output_dir=r"C:\Users\hyf\Desktop\因子\data\new_pit",
+)
 
-## 命令行运行
-
-如需直接运行 `download_new_pit.py`，请预先设置：
-
-```text
-PIT_DB_HOST
-PIT_DB_PORT
-PIT_DB_USER
-PIT_DB_PASSWORD
-PIT_DB_NAME
-PIT_ARCTIC_URI
-PIT_ARCTIC_LIBRARY
-PIT_START_DATE
-PIT_END_DATE
+income.shape, income["PUBLISH_DATE"].min(), income["PUBLISH_DATE"].max()
 ```
 
-数据库密码没有写入程序文件。
+也可以直接使用Pandas读取整个分区目录：
+
+```python
+import pandas as pd
+
+income = pd.read_parquet(
+    r"C:\Users\hyf\Desktop\因子\data\new_pit\new_pit_income"
+)
+```
 
 ## 增量更新限制
 
-断点续跑按照 `PUBLISH_DATE` 继续，适合首次历史下载和正常向后更新。如果数据供应商
-使用 `UPDATE_TIME` 修正了较早公告日的原记录，单纯向后更新不会捕获这种回填；建议定期
-用新 symbol 做一次完整重建，再核对事件数量。
+断点续传适用于首次历史下载和正常向后更新。如果供应商通过 `UPDATE_TIME` 回填或
+修改了较早公告日的记录，向后续传无法发现它。建议定期下载到一个新的空目录进行
+完整重建，再核对行数和事件主键；不要直接覆盖唯一的数据副本。

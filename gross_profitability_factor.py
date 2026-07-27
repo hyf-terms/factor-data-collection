@@ -289,10 +289,34 @@ def build_daily_gross_profitability(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="生成 PIT 毛利盈利因子 parquet")
-    parser.add_argument("--income", required=True, type=Path, help="利润表 parquet")
-    parser.add_argument("--balance", required=True, type=Path, help="资产负债表 parquet")
+    parser.add_argument(
+        "--pit-dir",
+        type=Path,
+        default=Path(__file__).resolve().parent / "data" / "new_pit",
+        help="PIT分区Parquet根目录",
+    )
+    parser.add_argument(
+        "--income",
+        type=Path,
+        help="利润表Parquet文件或数据集目录；默认 pit-dir/new_pit_income",
+    )
+    parser.add_argument(
+        "--balance",
+        type=Path,
+        help="资产负债表Parquet文件或数据集目录；默认 pit-dir/new_pit_balance",
+    )
     parser.add_argument("--universe", required=True, type=Path, help="标签/股票池 parquet")
-    parser.add_argument("--output", required=True, type=Path, help="输出 parquet")
+    parser.add_argument(
+        "--output",
+        required=True,
+        type=Path,
+        help="供中性化使用的因子Parquet，只输出键和一个数值因子",
+    )
+    parser.add_argument(
+        "--audit-output",
+        type=Path,
+        help="可选：保存含原始值、缩尾值、排名和财报截止日的审计Parquet",
+    )
     parser.add_argument(
         "--all-reports",
         action="store_true",
@@ -303,17 +327,58 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_args()
+    income_path = args.income or args.pit_dir / "new_pit_income"
+    balance_path = args.balance or args.pit_dir / "new_pit_balance"
+    income_columns = [
+        "ID",
+        "SECURITY_ID",
+        "END_DATE",
+        "END_DATE_REP",
+        "ACT_PUBTIME",
+        "REPORT_TYPE",
+        "MERGED_FLAG",
+        "IS_CURRENT_PERIOD",
+        "REVENUE",
+        "COGS",
+    ]
+    balance_columns = [
+        "ID",
+        "SECURITY_ID",
+        "END_DATE",
+        "END_DATE_REP",
+        "ACT_PUBTIME",
+        "REPORT_TYPE",
+        "MERGED_FLAG",
+        "IS_CURRENT_PERIOD",
+        "T_ASSETS",
+    ]
     result = build_daily_gross_profitability(
-        pd.read_parquet(args.income),
-        pd.read_parquet(args.balance),
+        pd.read_parquet(income_path, columns=income_columns, engine="pyarrow"),
+        pd.read_parquet(balance_path, columns=balance_columns, engine="pyarrow"),
         pd.read_parquet(args.universe, columns=["TRADE_DATE", "SECURITY_ID"]),
         annual_only=not args.all_reports,
     )
+    factor_output = result[
+        ["TRADE_DATE", "SECURITY_ID", "GROSS_PROFITABILITY_W"]
+    ].rename(columns={"GROSS_PROFITABILITY_W": "gross_profitability"})
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    result.to_parquet(args.output, index=False)
+    factor_output.to_parquet(
+        args.output,
+        index=False,
+        engine="pyarrow",
+        compression="zstd",
+    )
+    if args.audit_output:
+        args.audit_output.parent.mkdir(parents=True, exist_ok=True)
+        result.to_parquet(
+            args.audit_output,
+            index=False,
+            engine="pyarrow",
+            compression="zstd",
+        )
     print(
-        f"已写入 {args.output}: {len(result):,} 行，"
-        f"非空因子 {result['GROSS_PROFITABILITY'].notna().sum():,} 行"
+        f"已写入 {args.output}: {len(factor_output):,} 行，"
+        f"非空因子 {factor_output['gross_profitability'].notna().sum():,} 行"
     )
 
 
