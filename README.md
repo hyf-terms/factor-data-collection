@@ -7,6 +7,8 @@
 - `download_new_pit.py`：按年下载资产负债表、利润表和现金流量表 PIT 数据。
 - `新准则PIT下载说明.md`：Notebook 与命令行使用说明。
 - `new_pit.env.example`：不含真实账号密码的环境变量模板。
+- `gross_profitability_factor.py`：Novy-Marx 毛利盈利因子的严格 PIT 实现。
+- `毛利盈利因子复现说明.md`：论文口径、字段映射与运行示例。
 
 ## 数据源
 
