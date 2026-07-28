@@ -4,7 +4,7 @@
 
 ## 当前内容
 
-- `download_new_pit.py`：下载三张PIT表，支持新建独立ArcticDB库或保存分区Parquet。
+- `download_new_pit.py`：下载三张PIT表并保存为本地分区Parquet。
 - `新准则PIT下载说明.md`：Notebook 与命令行使用说明。
 - `new_pit.env.example`：不含真实账号密码的环境变量模板。
 - `requirements.txt`：Parquet读写和数据库连接依赖。
@@ -19,8 +19,7 @@
 | 利润表 | `vw_fdmt_is_new` | `new_pit_income` |
 | 现金流量表 | `vw_fdmt_cf_new` | `new_pit_cashflow` |
 
-程序推荐在用户自己的 `factor_data/arcticdb` 建立全新ArcticDB实例及
-`factor_pit` 库；也可保存到 `data/new_pit` 分区Parquet。两种方式都保留
+程序不使用ArcticDB，默认保存到 `data/new_pit` 分区Parquet，并保留
 `PUBLISH_DATE`、`ACT_PUBTIME` 和修订记录。
 
 ## 安全说明

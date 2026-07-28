@@ -299,15 +299,6 @@ def _parse_args() -> argparse.Namespace:
         help="PIT分区Parquet根目录",
     )
     parser.add_argument(
-        "--arctic-uri",
-        help="可选：从ArcticDB读取PIT，例如 lmdb://C:/Users/hyf/factor_data/arcticdb?map_size=100GB",
-    )
-    parser.add_argument(
-        "--arctic-library",
-        default="factor_pit",
-        help="ArcticDB库名，默认factor_pit",
-    )
-    parser.add_argument(
         "--income",
         type=Path,
         help="利润表Parquet文件或数据集目录；默认 pit-dir/new_pit_income",
@@ -364,30 +355,16 @@ def main() -> None:
         "IS_CURRENT_PERIOD",
         "T_ASSETS",
     ]
-    if args.arctic_uri:
-        import arcticdb as adb
-
-        arctic = adb.Arctic(args.arctic_uri)
-        library = arctic[args.arctic_library]
-        income = library.read(
-            "new_pit_income",
-            columns=income_columns,
-        ).data.reset_index()
-        balance = library.read(
-            "new_pit_balance",
-            columns=balance_columns,
-        ).data.reset_index()
-    else:
-        income = pd.read_parquet(
-            income_path,
-            columns=income_columns,
-            engine="pyarrow",
-        )
-        balance = pd.read_parquet(
-            balance_path,
-            columns=balance_columns,
-            engine="pyarrow",
-        )
+    income = pd.read_parquet(
+        income_path,
+        columns=income_columns,
+        engine="pyarrow",
+    )
+    balance = pd.read_parquet(
+        balance_path,
+        columns=balance_columns,
+        engine="pyarrow",
+    )
 
     result = build_daily_gross_profitability(
         income,

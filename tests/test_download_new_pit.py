@@ -9,28 +9,6 @@ import pandas as pd
 import download_new_pit as downloader
 
 
-class _VersionedItem:
-    def __init__(self, data):
-        self.data = data
-
-
-class _FakeArcticLibrary:
-    def __init__(self):
-        self.symbols = {}
-
-    def list_symbols(self):
-        return list(self.symbols)
-
-    def write(self, symbol, data, metadata=None):
-        self.symbols[symbol] = data.copy()
-
-    def append(self, symbol, data, validate_index=True):
-        self.symbols[symbol] = pd.concat([self.symbols[symbol], data])
-
-    def tail(self, symbol, n=1):
-        return _VersionedItem(self.symbols[symbol].tail(n))
-
-
 class DownloadNewPitParquetTest(unittest.TestCase):
     def setUp(self):
         self.spec = downloader.PIT_TABLES[1]
@@ -114,38 +92,6 @@ class DownloadNewPitParquetTest(unittest.TestCase):
                 )
         read_mock.assert_not_called()
         self.assertEqual(result["rows"], 0)
-
-    def test_writes_and_resumes_same_arctic_library(self):
-        prepared = downloader._prepare_chunk(self.raw, self.spec)
-        library = _FakeArcticLibrary()
-        with patch.object(downloader, "_read_chunk", return_value=prepared):
-            first = downloader.download_one_table(
-                conn=object(),
-                lib=library,
-                storage="arcticdb",
-                spec=self.spec,
-                start_date="2024-01-01",
-                end_date="2024-04-21",
-                resume=True,
-            )
-        self.assertEqual(first["storage"], "arcticdb")
-        self.assertIn("new_pit_income", library.list_symbols())
-        stored = library.symbols["new_pit_income"]
-        self.assertEqual(stored.index.name, "PUBLISH_DATE")
-        self.assertEqual(len(stored), 2)
-
-        with patch.object(downloader, "_read_chunk") as read_mock:
-            second = downloader.download_one_table(
-                conn=object(),
-                lib=library,
-                storage="arcticdb",
-                spec=self.spec,
-                start_date="2024-01-01",
-                end_date="2024-04-21",
-                resume=True,
-            )
-        read_mock.assert_not_called()
-        self.assertEqual(second["rows"], 0)
 
     def test_duplicate_pit_event_is_rejected(self):
         duplicate = pd.concat([self.raw.iloc[[0]], self.raw.iloc[[0]]])

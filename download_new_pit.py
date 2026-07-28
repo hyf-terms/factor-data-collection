@@ -1,35 +1,18 @@
-r"""下载新会计准则三大财务报表原始披露 PIT 数据。
+r"""下载新会计准则三大财务报表原始披露PIT数据并保存为本地Parquet。
 
 数据源：
     vw_fdmt_bs_new  资产负债表
     vw_fdmt_is_new  利润表
     vw_fdmt_cf_new  现金流量表
 
-支持两种存储：推荐创建独立的 ``factor_pit`` ArcticDB库；
-也可按公告年份保存为分区Parquet。
-
-Parquet默认输出：
+默认输出：
     本脚本目录/data/new_pit/new_pit_balance/year=YYYY/*.parquet
     本脚本目录/data/new_pit/new_pit_income/year=YYYY/*.parquet
     本脚本目录/data/new_pit/new_pit_cashflow/year=YYYY/*.parquet
 
-推荐在 history_data.ipynb 已创建 conn 后运行：
+程序自动读取脚本目录下的 ``.env`` 获取源数据库连接信息。直接运行：
 
-    from download_new_pit import (
-        download_all_new_pit,
-        open_or_create_arctic_library,
-    )
-
-    pit_lib = open_or_create_arctic_library()
-
-    summary = download_all_new_pit(
-        conn=conn,
-        lib=pit_lib,
-        storage="arcticdb",
-        start_date="2018-01-01",
-        end_date="2026-07-27",
-        resume=True,
-    )
+    .venv\Scripts\python.exe download_new_pit.py
 """
 
 from __future__ import annotations
@@ -194,18 +177,6 @@ def _last_stored_date(dataset_dir: Path) -> pd.Timestamp | None:
     return max(maxima) if maxima else None
 
 
-def _last_arctic_date(lib, symbol: str) -> pd.Timestamp | None:
-    """读取ArcticDB symbol的最后公告日，用于断点续传。"""
-    if symbol not in set(lib.list_symbols()):
-        return None
-    tail = lib.tail(symbol, n=1).data
-    if tail.empty:
-        return None
-    if "PUBLISH_DATE" in tail.columns:
-        return pd.Timestamp(tail["PUBLISH_DATE"].max()).normalize()
-    return pd.Timestamp(tail.index.max()).normalize()
-
-
 def _prepare_chunk(df: pd.DataFrame, spec: PitTable) -> pd.DataFrame:
     if df.empty:
         return df
@@ -331,50 +302,15 @@ def _write_partition_atomic(
     return target
 
 
-def _write_arctic_chunk(data: pd.DataFrame, lib, spec: PitTable) -> None:
-    """按PUBLISH_DATE时间索引写入Notebook使用的ArcticDB库。"""
-    arctic_data = (
-        data.sort_values(
-            ["PUBLISH_DATE", "SECURITY_ID", "END_DATE", "ACT_PUBTIME", "ID"]
-        )
-        .set_index("PUBLISH_DATE")
-    )
-    if spec.dataset_name in set(lib.list_symbols()):
-        lib.append(
-            spec.dataset_name,
-            arctic_data,
-            validate_index=True,
-        )
-    else:
-        lib.write(
-            spec.dataset_name,
-            arctic_data,
-            metadata={
-                "source_table": spec.source_table,
-                "data_type": "raw_disclosure_pit",
-                "accounting_standard": "new",
-                "index": "PUBLISH_DATE",
-            },
-        )
-
-
 def download_one_table(
     conn,
     spec: PitTable,
     output_dir: str | Path = DEFAULT_OUTPUT_DIR,
-    lib=None,
-    storage: str | None = None,
     start_date: str | pd.Timestamp = "2018-01-01",
     end_date: str | pd.Timestamp | None = None,
     resume: bool = True,
 ) -> dict:
-    """按自然年下载一张PIT表，并写入ArcticDB或分区Parquet。"""
-    selected_storage = storage or ("arcticdb" if lib is not None else "parquet")
-    if selected_storage not in {"arcticdb", "parquet"}:
-        raise ValueError("storage 只能是 'arcticdb' 或 'parquet'")
-    if selected_storage == "arcticdb" and lib is None:
-        raise ValueError("storage='arcticdb' 时必须传入 lib")
-
+    """按自然年下载一张PIT表并写入本地分区Parquet。"""
     end = (
         pd.Timestamp.today().normalize()
         if end_date is None
@@ -383,26 +319,14 @@ def download_one_table(
     start = pd.Timestamp(start_date).normalize()
     dataset_dir = _dataset_dir(output_dir, spec)
 
-    if resume:
-        last_date = (
-            _last_arctic_date(lib, spec.dataset_name)
-            if selected_storage == "arcticdb"
-            else _last_stored_date(dataset_dir)
-        )
-    else:
-        last_date = None
+    last_date = _last_stored_date(dataset_dir) if resume else None
     if last_date is not None:
         start = max(start, last_date + pd.Timedelta("1D"))
 
     summary = {
         "source_table": spec.source_table,
         "dataset": spec.dataset_name,
-        "storage": selected_storage,
-        "destination": (
-            f"ArcticDB:{spec.dataset_name}"
-            if selected_storage == "arcticdb"
-            else str(dataset_dir)
-        ),
+        "output_dir": str(dataset_dir),
         "rows": 0,
         "chunks": 0,
         "start_date": start,
@@ -422,21 +346,16 @@ def download_one_table(
             print("  本区间无数据")
             continue
 
-        if selected_storage == "arcticdb":
-            _write_arctic_chunk(data, lib, spec)
-            destination = f"ArcticDB symbol {spec.dataset_name}"
-        else:
-            path = _write_partition_atomic(
-                data,
-                dataset_dir,
-                chunk_start,
-                chunk_end,
-            )
-            destination = str(path)
+        path = _write_partition_atomic(
+            data,
+            dataset_dir,
+            chunk_start,
+            chunk_end,
+        )
         summary["rows"] += len(data)
         summary["chunks"] += 1
         print(
-            f"  写入 {len(data):,} 行至 {destination}，"
+            f"  写入 {len(data):,} 行至 {path}，"
             f"PUBLISH_DATE 最大值={data['PUBLISH_DATE'].max().date()}"
         )
     return summary
@@ -445,20 +364,16 @@ def download_one_table(
 def download_all_new_pit(
     conn,
     output_dir: str | Path = DEFAULT_OUTPUT_DIR,
-    lib=None,
-    storage: str | None = None,
     start_date: str | pd.Timestamp = "2018-01-01",
     end_date: str | pd.Timestamp | None = None,
     resume: bool = True,
 ) -> pd.DataFrame:
-    """下载三张新准则PIT表；传入lib时默认写入同一ArcticDB库。"""
+    """下载三张新准则PIT表并保存为本地分区Parquet。"""
     summaries = [
         download_one_table(
             conn=conn,
             output_dir=output_dir,
             spec=spec,
-            lib=lib,
-            storage=storage,
             start_date=start_date,
             end_date=end_date,
             resume=resume,
@@ -469,7 +384,7 @@ def download_all_new_pit(
     print("\n下载汇总")
     print(
         result[
-            ["source_table", "dataset", "storage", "rows", "chunks", "destination"]
+            ["source_table", "dataset", "rows", "chunks", "output_dir"]
         ].to_string(index=False)
     )
     return result
@@ -488,8 +403,11 @@ def read_pit_dataset(
 
 
 def _connect_from_environment():
-    """命令行模式：创建源MySQL连接。"""
+    """从脚本旁的.env和当前环境变量创建只读源MySQL连接。"""
     import MySQLdb
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().with_name(".env"))
 
     required = {
         "PIT_DB_HOST": os.getenv("PIT_DB_HOST"),
@@ -499,7 +417,10 @@ def _connect_from_environment():
     }
     missing = [name for name, value in required.items() if not value]
     if missing:
-        raise RuntimeError(f"缺少环境变量: {missing}")
+        raise RuntimeError(
+            f"缺少源数据库配置: {missing}。"
+            "请复制new_pit.env.example为.env并填写真实连接信息。"
+        )
 
     return MySQLdb.connect(
         host=required["PIT_DB_HOST"],
@@ -509,49 +430,12 @@ def _connect_from_environment():
         database=required["PIT_DB_NAME"],
         charset=os.getenv("PIT_DB_CHARSET", "utf8mb4"),
     )
-
-
-def open_or_create_arctic_library(
-    uri: str = "lmdb://C:/Users/hyf/factor_data/arcticdb?map_size=100GB",
-    library_name: str = "factor_pit",
-):
-    """打开独立PIT库；若不存在则在指定ArcticDB实例中创建。"""
-    import arcticdb as adb
-
-    if uri.startswith("lmdb://"):
-        lmdb_path = uri.removeprefix("lmdb://").split("?", 1)[0]
-        Path(lmdb_path).mkdir(parents=True, exist_ok=True)
-    arctic = adb.Arctic(uri)
-    if library_name not in set(arctic.list_libraries()):
-        arctic.create_library(library_name)
-    return arctic[library_name]
-
-
-def _arctic_from_environment():
-    """根据命令行环境变量打开或创建独立PIT库。"""
-    return open_or_create_arctic_library(
-        uri=os.getenv(
-            "PIT_ARCTIC_URI",
-            "lmdb://C:/Users/hyf/factor_data/arcticdb?map_size=100GB",
-        ),
-        library_name=os.getenv("PIT_ARCTIC_LIBRARY", "factor_pit"),
-    )
-
-
 if __name__ == "__main__":
     database_connection = _connect_from_environment()
-    selected_storage = os.getenv("PIT_STORAGE", "parquet").lower()
-    arctic_library = (
-        _arctic_from_environment()
-        if selected_storage == "arcticdb"
-        else None
-    )
     try:
         download_all_new_pit(
             conn=database_connection,
             output_dir=os.getenv("PIT_OUTPUT_DIR", str(DEFAULT_OUTPUT_DIR)),
-            lib=arctic_library,
-            storage=selected_storage,
             start_date=os.getenv("PIT_START_DATE", "2018-01-01"),
             end_date=os.getenv("PIT_END_DATE") or None,
             resume=True,
