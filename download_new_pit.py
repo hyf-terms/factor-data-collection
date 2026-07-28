@@ -392,7 +392,7 @@ def download_one_table(
     else:
         last_date = None
     if last_date is not None:
-        start = max(start, last_date + pd.Timedelta(days=1))
+        start = max(start, last_date + pd.Timedelta("1D"))
 
     summary = {
         "source_table": spec.source_table,

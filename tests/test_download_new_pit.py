@@ -68,7 +68,7 @@ class DownloadNewPitParquetTest(unittest.TestCase):
                     output_dir=root,
                     spec=self.spec,
                     start_date="2024-01-01",
-                    end_date="2024-12-31",
+                    end_date="2024-04-21",
                     resume=True,
                 )
             self.assertEqual(first["rows"], 2)
@@ -88,7 +88,7 @@ class DownloadNewPitParquetTest(unittest.TestCase):
                     output_dir=root,
                     spec=self.spec,
                     start_date="2024-01-01",
-                    end_date="2024-12-31",
+                    end_date="2024-04-21",
                     resume=True,
                 )
             read_mock.assert_not_called()

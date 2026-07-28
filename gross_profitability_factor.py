@@ -191,8 +191,11 @@ def assign_available_trade_date(
 
     event_time = pd.to_datetime(result["EVENT_TIME"], errors="coerce")
     event_day = event_time.dt.normalize()
-    cutoff = event_day + pd.to_timedelta(market_open)
-    candidate_day = event_day.where(event_time.le(cutoff), event_day + pd.Timedelta(days=1))
+    cutoff = event_day + pd.Timedelta(market_open)
+    candidate_day = event_day.where(
+        event_time.le(cutoff),
+        event_day + pd.Timedelta("1D"),
+    )
     positions = calendar.searchsorted(candidate_day.to_numpy(), side="left")
     available = np.full(
         len(result),

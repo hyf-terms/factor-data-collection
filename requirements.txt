@@ -1,5 +1,5 @@
-pandas>=2.0
+pandas>=2.0,<3
 numpy>=1.24
 pyarrow>=12
 mysqlclient>=2.2
-arcticdb
+arcticdb>=6.19
