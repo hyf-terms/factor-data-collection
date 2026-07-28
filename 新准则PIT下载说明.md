@@ -1,57 +1,99 @@
-# 新准则三大报表PIT下载说明（Parquet版）
+# 新准则三大报表PIT下载说明
 
-## 输出结构
+## 与原Notebook的存储关系
 
-程序从财务数据库读取三张表，直接按公告年份保存为分区Parquet，不再使用ArcticDB：
+`history_data.ipynb` 使用：
 
-```text
-data/new_pit/
-├── new_pit_balance/
-│   ├── year=2018/part-20180101-20181231.parquet
-│   └── ...
-├── new_pit_income/
-│   └── year=2018/part-20180101-20181231.parquet
-└── new_pit_cashflow/
-    └── year=2018/part-20180101-20181231.parquet
+```python
+ac = adb.Arctic("lmdb://C:/nz/arcticdb?map_size=600GB")
+lib = ac["hermes"]
 ```
 
-| 报表 | 数据源 | Parquet数据集 |
+并通过 `lib.write()`、`lib.append()` 保存行情和财务数据。为避免新PIT影响
+`hermes` 中的历史行情和旧财务表，程序在同一个ArcticDB实例中新建独立库
+`factor_pit`：
+
+```text
+C:\nz\arcticdb
+├── hermes       # 原Notebook数据
+└── factor_pit   # 新PIT数据
+```
+
+新库包含：
+
+| 报表 | 数据源 | 新ArcticDB symbol |
 |---|---|---|
 | 资产负债表 | `vw_fdmt_bs_new` | `new_pit_balance` |
 | 利润表 | `vw_fdmt_is_new` | `new_pit_income` |
 | 现金流量表 | `vw_fdmt_cf_new` | `new_pit_cashflow` |
 
-## 推荐：在Notebook运行
+## 推荐：在Notebook创建并写入新库
 
-确认当前Python环境可以导入 `pandas`、`pyarrow` 和 `MySQLdb`；如缺少依赖：
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-先运行 `history_data.ipynb` 中创建数据库连接 `conn` 的单元格。无需创建
-ArcticDB的 `ac` 或 `lib`：
+先运行Notebook中创建源数据库连接 `conn` 的单元格，再运行：
 
 ```python
-from download_new_pit import download_all_new_pit
+from download_new_pit import (
+    download_all_new_pit,
+    open_or_create_arctic_library,
+)
+
+pit_lib = open_or_create_arctic_library(
+    uri="lmdb://C:/nz/arcticdb?map_size=600GB",
+    library_name="factor_pit",
+)
 
 summary = download_all_new_pit(
     conn=conn,
-    output_dir=r"C:\Users\hyf\Desktop\因子\data\new_pit",
+    lib=pit_lib,
+    storage="arcticdb",
     start_date="2018-01-01",
-    end_date="2026-07-27",
+    end_date="2026-07-28",
     resume=True,
 )
 summary
 ```
 
-程序按公告年份逐块读取。每一块先完整写入临时文件，成功后再原子改名，避免中断后
-留下伪装成完整数据的Parquet。`resume=True` 会扫描已有文件的最大
-`PUBLISH_DATE`，从下一日继续。
+`open_or_create_arctic_library` 会先检查库名；不存在才创建，不会删除或重建
+`hermes`。`resume=True` 会读取每个新symbol的最大 `PUBLISH_DATE`，从下一日
+继续。首次使用 `write`，以后按公告年份使用 `append`。
 
-## PowerShell命令行运行
+检查结果：
 
-在当前PowerShell窗口中设置环境变量：
+```python
+[name for name in pit_lib.list_symbols() if name.startswith("new_pit_")]
+
+for name in ["new_pit_balance", "new_pit_income", "new_pit_cashflow"]:
+    tail = pit_lib.tail(name, n=3).data
+    print(name, tail.shape, tail.index.min(), tail.index.max())
+```
+
+## 可选：保存为分区Parquet
+
+若希望生成便于交换或备份的文件，不传 `lib`：
+
+```python
+summary = download_all_new_pit(
+    conn=conn,
+    output_dir=r"C:\Users\hyf\Desktop\因子\data\new_pit",
+    storage="parquet",
+    start_date="2018-01-01",
+    end_date="2026-07-28",
+    resume=True,
+)
+```
+
+输出结构：
+
+```text
+data/new_pit/
+├── new_pit_balance/year=YYYY/*.parquet
+├── new_pit_income/year=YYYY/*.parquet
+└── new_pit_cashflow/year=YYYY/*.parquet
+```
+
+## PowerShell命令行模式
+
+在原ArcticDB实例中新建 `factor_pit` 库：
 
 ```powershell
 cd "C:\Users\hyf\Desktop\因子"
@@ -61,55 +103,37 @@ $env:PIT_DB_PORT = "3306"
 $env:PIT_DB_USER = "数据库用户名"
 $env:PIT_DB_PASSWORD = "数据库密码"
 $env:PIT_DB_NAME = "数据库名称"
-$env:PIT_OUTPUT_DIR = "C:\Users\hyf\Desktop\因子\data\new_pit"
+
+$env:PIT_STORAGE = "arcticdb"
+$env:PIT_ARCTIC_URI = "lmdb://C:/nz/arcticdb?map_size=600GB"
+$env:PIT_ARCTIC_LIBRARY = "factor_pit"
 $env:PIT_START_DATE = "2018-01-01"
-$env:PIT_END_DATE = "2026-07-27"
+$env:PIT_END_DATE = "2026-07-28"
 
 python .\download_new_pit.py
 ```
 
-这些变量只在当前PowerShell窗口有效。不要把真实数据库密码写入代码、说明文件或
-提交到GitHub。`PIT_OUTPUT_DIR` 未设置时，程序默认写入脚本旁的
-`data\new_pit`。
+若改为Parquet，把 `PIT_STORAGE` 设为 `parquet`，并设置：
+
+```powershell
+$env:PIT_OUTPUT_DIR = "C:\Users\hyf\Desktop\因子\data\new_pit"
+```
+
+环境变量只在当前PowerShell窗口有效。不要把真实密码提交到GitHub。
 
 ## 数据口径
 
 - 只保留合并报表：`MERGED_FLAG='1'`。
 - 只保留年报、一季报、半年报、三季报：`A/Q1/S1/Q3`。
-- 使用证券在公告时点有效的上市及证券类型关系。
-- 保留当前期、比较期和后续修订记录。
-- 保留 `PUBLISH_DATE`、`ACT_PUBTIME`、`UPDATE_TIME` 等PIT字段。
-- 添加 `IS_CURRENT_PERIOD`，区分当前期与比较期。
-- Parquet使用Zstandard压缩，日期、整数和财务数值统一数据类型。
+- 使用公告时点有效的上市和证券类型关系。
+- 保留当前期、比较期、披露时间及后续修订。
+- 保留 `PUBLISH_DATE`、`ACT_PUBTIME`、`UPDATE_TIME`。
+- 添加 `IS_CURRENT_PERIOD`。
 
-下载数据仍是公告事件表，不能按 `END_DATE` 直接向历史日期回填。因子必须根据
-`ACT_PUBTIME` 判断最早可用交易日。
-
-## 检查和读取
-
-```python
-from download_new_pit import read_pit_dataset
-
-income = read_pit_dataset(
-    "new_pit_income",
-    output_dir=r"C:\Users\hyf\Desktop\因子\data\new_pit",
-)
-
-income.shape, income["PUBLISH_DATE"].min(), income["PUBLISH_DATE"].max()
-```
-
-也可以直接使用Pandas读取整个分区目录：
-
-```python
-import pandas as pd
-
-income = pd.read_parquet(
-    r"C:\Users\hyf\Desktop\因子\data\new_pit\new_pit_income"
-)
-```
+下载结果是公告事件表，不能按 `END_DATE` 提前回填。因子构建必须根据
+`ACT_PUBTIME` 判断数据最早可用的交易日。
 
 ## 增量更新限制
 
-断点续传适用于首次历史下载和正常向后更新。如果供应商通过 `UPDATE_TIME` 回填或
-修改了较早公告日的记录，向后续传无法发现它。建议定期下载到一个新的空目录进行
-完整重建，再核对行数和事件主键；不要直接覆盖唯一的数据副本。
+正常向后更新可用 `resume=True`。如果供应商用 `UPDATE_TIME` 修改较早公告日的
+历史记录，简单向后更新无法捕获；应定期用新的symbol或新Parquet目录完整重建并核对。

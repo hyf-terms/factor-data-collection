@@ -4,7 +4,7 @@
 
 ## 当前内容
 
-- `download_new_pit.py`：按公告年份下载三张PIT表并保存为分区Parquet。
+- `download_new_pit.py`：下载三张PIT表，支持新建独立ArcticDB库或保存分区Parquet。
 - `新准则PIT下载说明.md`：Notebook 与命令行使用说明。
 - `new_pit.env.example`：不含真实账号密码的环境变量模板。
 - `requirements.txt`：Parquet读写和数据库连接依赖。
@@ -13,14 +13,15 @@
 
 ## 数据源
 
-| 报表 | 数据源表 | Parquet数据集 |
+| 报表 | 数据源表 | 新symbol/数据集 |
 |---|---|---|
 | 资产负债表 | `vw_fdmt_bs_new` | `new_pit_balance` |
 | 利润表 | `vw_fdmt_is_new` | `new_pit_income` |
 | 现金流量表 | `vw_fdmt_cf_new` | `new_pit_cashflow` |
 
-程序不依赖ArcticDB，默认保存到 `data/new_pit`。它保留 `PUBLISH_DATE`、
-`ACT_PUBTIME` 和修订记录，用于后续按历史可得信息构造PIT因子。
+程序推荐在原ArcticDB实例中新建 `factor_pit` 库，与 `hermes` 隔离；也可保存到
+`data/new_pit` 分区Parquet。两种方式都保留 `PUBLISH_DATE`、`ACT_PUBTIME`
+和修订记录。
 
 ## 安全说明
 
