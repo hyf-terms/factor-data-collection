@@ -512,12 +512,15 @@ def _connect_from_environment():
 
 
 def open_or_create_arctic_library(
-    uri: str = "lmdb://C:/nz/arcticdb?map_size=600GB",
+    uri: str = "lmdb://C:/Users/hyf/factor_data/arcticdb?map_size=100GB",
     library_name: str = "factor_pit",
 ):
     """打开独立PIT库；若不存在则在指定ArcticDB实例中创建。"""
     import arcticdb as adb
 
+    if uri.startswith("lmdb://"):
+        lmdb_path = uri.removeprefix("lmdb://").split("?", 1)[0]
+        Path(lmdb_path).mkdir(parents=True, exist_ok=True)
     arctic = adb.Arctic(uri)
     if library_name not in set(arctic.list_libraries()):
         arctic.create_library(library_name)
@@ -529,7 +532,7 @@ def _arctic_from_environment():
     return open_or_create_arctic_library(
         uri=os.getenv(
             "PIT_ARCTIC_URI",
-            "lmdb://C:/nz/arcticdb?map_size=600GB",
+            "lmdb://C:/Users/hyf/factor_data/arcticdb?map_size=100GB",
         ),
         library_name=os.getenv("PIT_ARCTIC_LIBRARY", "factor_pit"),
     )

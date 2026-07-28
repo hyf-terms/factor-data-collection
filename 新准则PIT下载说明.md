@@ -10,12 +10,11 @@ lib = ac["hermes"]
 ```
 
 并通过 `lib.write()`、`lib.append()` 保存行情和财务数据。为避免新PIT影响
-`hermes` 中的历史行情和旧财务表，程序在同一个ArcticDB实例中新建独立库
-`factor_pit`：
+`hermes` 中的历史行情和旧财务表，而且该路径属于同事的本地环境，因此程序改为
+在你自己的目录创建全新ArcticDB实例：
 
 ```text
-C:\nz\arcticdb
-├── hermes       # 原Notebook数据
+C:\Users\hyf\factor_data\arcticdb
 └── factor_pit   # 新PIT数据
 ```
 
@@ -38,7 +37,7 @@ from download_new_pit import (
 )
 
 pit_lib = open_or_create_arctic_library(
-    uri="lmdb://C:/nz/arcticdb?map_size=600GB",
+    uri="lmdb://C:/Users/hyf/factor_data/arcticdb?map_size=100GB",
     library_name="factor_pit",
 )
 
@@ -53,9 +52,9 @@ summary = download_all_new_pit(
 summary
 ```
 
-`open_or_create_arctic_library` 会先检查库名；不存在才创建，不会删除或重建
-`hermes`。`resume=True` 会读取每个新symbol的最大 `PUBLISH_DATE`，从下一日
-继续。首次使用 `write`，以后按公告年份使用 `append`。
+`open_or_create_arctic_library` 会创建你自己的存储目录和 `factor_pit` 库，不会连接
+或修改同事的 `C:\nz\arcticdb`。`resume=True` 会读取每个新symbol的最大
+`PUBLISH_DATE`，从下一日继续。
 
 检查结果：
 
@@ -93,7 +92,7 @@ data/new_pit/
 
 ## PowerShell命令行模式
 
-在原ArcticDB实例中新建 `factor_pit` 库：
+在你自己的目录新建 `factor_pit` 库：
 
 ```powershell
 cd "C:\Users\hyf\Desktop\因子"
@@ -105,7 +104,7 @@ $env:PIT_DB_PASSWORD = "数据库密码"
 $env:PIT_DB_NAME = "数据库名称"
 
 $env:PIT_STORAGE = "arcticdb"
-$env:PIT_ARCTIC_URI = "lmdb://C:/nz/arcticdb?map_size=600GB"
+$env:PIT_ARCTIC_URI = "lmdb://C:/Users/hyf/factor_data/arcticdb?map_size=100GB"
 $env:PIT_ARCTIC_LIBRARY = "factor_pit"
 $env:PIT_START_DATE = "2018-01-01"
 $env:PIT_END_DATE = "2026-07-28"

@@ -297,7 +297,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--arctic-uri",
-        help="可选：从ArcticDB读取PIT，例如 lmdb://C:/nz/arcticdb?map_size=600GB",
+        help="可选：从ArcticDB读取PIT，例如 lmdb://C:/Users/hyf/factor_data/arcticdb?map_size=100GB",
     )
     parser.add_argument(
         "--arctic-library",

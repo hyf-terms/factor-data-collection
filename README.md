@@ -19,9 +19,9 @@
 | 利润表 | `vw_fdmt_is_new` | `new_pit_income` |
 | 现金流量表 | `vw_fdmt_cf_new` | `new_pit_cashflow` |
 
-程序推荐在原ArcticDB实例中新建 `factor_pit` 库，与 `hermes` 隔离；也可保存到
-`data/new_pit` 分区Parquet。两种方式都保留 `PUBLISH_DATE`、`ACT_PUBTIME`
-和修订记录。
+程序推荐在用户自己的 `factor_data/arcticdb` 建立全新ArcticDB实例及
+`factor_pit` 库；也可保存到 `data/new_pit` 分区Parquet。两种方式都保留
+`PUBLISH_DATE`、`ACT_PUBTIME` 和修订记录。
 
 ## 安全说明
 
