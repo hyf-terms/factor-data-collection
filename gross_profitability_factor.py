@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Iterable
+from datetime import time, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -191,10 +192,17 @@ def assign_available_trade_date(
 
     event_time = pd.to_datetime(result["EVENT_TIME"], errors="coerce")
     event_day = event_time.dt.normalize()
-    cutoff = event_day + pd.Timedelta(market_open)
+    market_clock = time.fromisoformat(market_open)
+    market_delta = timedelta(
+        hours=market_clock.hour,
+        minutes=market_clock.minute,
+        seconds=market_clock.second,
+        microseconds=market_clock.microsecond,
+    )
+    cutoff = event_day + market_delta
     candidate_day = event_day.where(
         event_time.le(cutoff),
-        event_day + pd.Timedelta("1D"),
+        event_day + timedelta(days=1),
     )
     positions = calendar.searchsorted(candidate_day.to_numpy(), side="left")
     available = np.full(
@@ -308,11 +316,16 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         help="资产负债表Parquet文件或数据集目录；默认 pit-dir/new_pit_balance",
     )
-    parser.add_argument("--universe", required=True, type=Path, help="标签/股票池 parquet")
+    parser.add_argument(
+        "--universe",
+        type=Path,
+        default=Path(__file__).resolve().parent / "label.parquet",
+        help="标签/股票池 parquet；默认使用脚本同目录的 label.parquet",
+    )
     parser.add_argument(
         "--output",
-        required=True,
         type=Path,
+        default=Path(__file__).resolve().parent / "factors.parquet",
         help="供中性化使用的因子Parquet，只输出键和一个数值因子",
     )
     parser.add_argument(

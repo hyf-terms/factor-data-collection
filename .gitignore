@@ -2,6 +2,7 @@
 .env
 .env.*
 !*.env.example
+new_pit_db_local.py
 
 # Python
 __pycache__/
@@ -33,3 +34,5 @@ arcticdb/
 *.log
 outputs/
 tmp/
+factor_components/
+factor_test_output*/

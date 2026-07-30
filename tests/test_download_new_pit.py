@@ -42,12 +42,14 @@ class DownloadNewPitParquetTest(unittest.TestCase):
             root = Path(temporary)
             with patch.object(downloader, "_read_chunk", return_value=prepared):
                 first = downloader.download_one_table(
-                    conn=object(),
+                    token="test-token",
                     output_dir=root,
                     spec=self.spec,
                     start_date="2024-01-01",
                     end_date="2024-04-21",
                     resume=True,
+                    chunk_days=366,
+                    session=object(),
                 )
             self.assertEqual(first["rows"], 2)
             self.assertEqual(first["chunks"], 1)
@@ -62,39 +64,47 @@ class DownloadNewPitParquetTest(unittest.TestCase):
 
             with patch.object(downloader, "_read_chunk") as read_mock:
                 second = downloader.download_one_table(
-                    conn=object(),
+                    token="test-token",
                     output_dir=root,
                     spec=self.spec,
                     start_date="2024-01-01",
                     end_date="2024-04-21",
                     resume=True,
+                    chunk_days=366,
+                    session=object(),
                 )
             read_mock.assert_not_called()
             self.assertEqual(second["rows"], 0)
 
     def test_resume_stops_before_database_query(self):
         with tempfile.TemporaryDirectory() as temporary:
-            with (
-                patch.object(
-                    downloader,
-                    "_last_stored_date",
-                    return_value=pd.Timestamp("2024-12-31"),
-                ),
-                patch.object(downloader, "_read_chunk") as read_mock,
-            ):
+            root = Path(temporary)
+            target = downloader._partition_path(
+                root / self.spec.dataset_name,
+                pd.Timestamp("2024-01-01"),
+                pd.Timestamp("2024-12-31"),
+            )
+            target.parent.mkdir(parents=True)
+            target.touch()
+            with patch.object(downloader, "_read_chunk") as read_mock:
                 result = downloader.download_one_table(
-                    conn=object(),
+                    token="test-token",
                     output_dir=temporary,
                     spec=self.spec,
                     start_date="2024-01-01",
                     end_date="2024-12-31",
                     resume=True,
+                    chunk_days=366,
+                    session=object(),
                 )
         read_mock.assert_not_called()
         self.assertEqual(result["rows"], 0)
+        self.assertEqual(result["skipped_chunks"], 1)
 
     def test_duplicate_pit_event_is_rejected(self):
-        duplicate = pd.concat([self.raw.iloc[[0]], self.raw.iloc[[0]]])
+        duplicate = pd.concat([self.raw.iloc[[0]], self.raw.iloc[[0]]]).copy()
+        duplicate.iloc[1, duplicate.columns.get_loc("ID")] = 12
+        duplicate.iloc[1, duplicate.columns.get_loc("REVENUE")] = 201.0
         with self.assertRaises(ValueError):
             downloader._prepare_chunk(duplicate, self.spec)
 
