@@ -13,6 +13,7 @@
 - `fundamental_priority_factors.py`：经营利润增长、经营利润加速度、CFO SUE、应计质量。
 - `fundamental_priority_factors_part2.py`：资产增长、投资率、应收与存货异常增长。
 - `secondary_priority_factors.py`：盈利质量、管理层误定价、应计及非经常损益、基本面动量复合因子。
+- `event_financial_factor_search.py`：构建 Q1 盈余惊喜、扣非盈余惊喜及事件条件财务复合候选。
 - `ch_factor_models.py`：中国市场 CH-3、CH-4 模型复现。
 - `factors_neus_only.py`：合并因子、Barra 和标签，逐日残差化并计算 IC。
 

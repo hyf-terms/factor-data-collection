@@ -211,6 +211,9 @@ def residualize_values_by_date(
 ) -> tuple[pd.DataFrame, float]:
     """Run daily OLS with an intercept and replace values by residuals."""
     out = frame.copy()
+    # Candidate files may use float32 to reduce disk usage. OLS produces
+    # float64 residuals, so promote explicitly before assignment.
+    out[value_cols] = out[value_cols].astype("float64")
     max_abs_moment = 0.0
     for _, indices in frame.groupby("TRADE_DATE", sort=True).groups.items():
         group = frame.loc[indices]
@@ -565,6 +568,9 @@ def summarize_ic(daily_ic: pd.DataFrame) -> pd.DataFrame:
                     else np.nan,
                     "meets_abs_ic_0035": bool(
                         np.isfinite(mean_ic) and abs(mean_ic) >= 0.035
+                    ),
+                    "meets_abs_ic_0030": bool(
+                        np.isfinite(mean_ic) and abs(mean_ic) >= 0.030
                     ),
                 }
             )
