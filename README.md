@@ -15,8 +15,10 @@
 - `secondary_priority_factors.py`：盈利质量、管理层误定价、应计及非经常损益、基本面动量复合因子。
 - `event_financial_factor_search.py`：构建 Q1 盈余惊喜、扣非盈余惊喜及事件条件财务复合候选。
 - `literature_financial_factor_search.py`：复现收入/利润惊喜、联合惊喜、惊喜持续性并生成受约束的复合参数变体。
+- `unreplicated_financial_factor_search.py`：复现净经营资产、杜邦分解、研发强度、资本开支和盈利稳定性等新增文献候选。
 - `ch_factor_models.py`：中国市场 CH-3、CH-4 模型复现。
 - `factors_neus_only.py`：合并因子、Barra 和标签，逐日残差化并计算 IC。
+- `organize_factor_packages.py`：按最新中性化 IC 将因子、代码、说明和轻量测试结果整理到“有效因子/无效因子”目录。
 
 ## 数据口径
 
