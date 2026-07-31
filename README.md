@@ -6,6 +6,7 @@
 
 - `download_new_pit.py`：通过数据接口下载三张 PIT 表并保存为分区 Parquet。
 - `download_new_pit_mysql.py`：从 MySQL 数据库读取 PIT 表并保存到本地。
+- `download_quarterly_financial_indicators.py`：下载新准则单季度财务指标 PIT，并输出完整字段字典。
 - `gross_profitability_factor.py`：毛利盈利因子。
 - `pead_sue_factor.py`：PEAD / SUE 盈余惊喜因子。
 - `quarterly_f_score.py`：季度 Piotroski F-score。
