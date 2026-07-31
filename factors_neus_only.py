@@ -224,8 +224,7 @@ def residualize_values_by_date(
             ]
         )
         values = group[value_cols].to_numpy(dtype=np.float64)
-        coefficients, *_ = np.linalg.lstsq(design, values, rcond=None)
-        residual = values - design @ coefficients
+        residual = _ols_residual(design, values)
         out.loc[indices, value_cols] = residual
         moment = design.T @ residual / max(len(group), 1)
         max_abs_moment = max(
@@ -233,6 +232,27 @@ def residualize_values_by_date(
             float(np.max(np.abs(moment))),
         )
     return out, max_abs_moment
+
+
+def _ols_residual(
+    design: np.ndarray,
+    values: np.ndarray,
+) -> np.ndarray:
+    """Return OLS residuals, using fast QR when the design is full-rank."""
+    varying = np.ptp(design, axis=0) > 1e-12
+    varying[0] = True
+    reduced = design[:, varying]
+    q_matrix, r_matrix = np.linalg.qr(reduced, mode="reduced")
+    diagonal = np.abs(np.diag(r_matrix))
+    tolerance = (
+        max(reduced.shape)
+        * np.finfo(np.float64).eps
+        * (float(diagonal.max()) if diagonal.size else 0.0)
+    )
+    if diagonal.size and np.all(diagonal > tolerance):
+        return values - q_matrix @ (q_matrix.T @ values)
+    coefficients, *_ = np.linalg.lstsq(reduced, values, rcond=None)
+    return values - reduced @ coefficients
 
 
 def _residualize_one_factor(
@@ -259,6 +279,84 @@ def _residualize_one_factor(
         exposure_cols,
     )
     return residualized[KEYS + [factor]], moment
+
+
+def residualize_factor_matrix_by_date(
+    base: pd.DataFrame,
+    factor_cols: list[str],
+    exposure_cols: list[str],
+    min_cross_section: int,
+) -> tuple[pd.DataFrame, list[str], float]:
+    """Residualize factors in batches that share the same valid-row mask.
+
+    ``np.linalg.lstsq`` accepts several right-hand sides.  Financial event
+    factors commonly have the same 60-day availability mask, so this avoids
+    decomposing an identical daily Barra design matrix once per factor.
+    """
+    required_size = max(min_cross_section, len(exposure_cols) + 5)
+    values_out = np.full(
+        (len(base), len(factor_cols)),
+        np.nan,
+        dtype=np.float64,
+    )
+    factor_positions = {
+        factor: position
+        for position, factor in enumerate(factor_cols)
+    }
+    max_abs_moment = 0.0
+
+    for positions in base.groupby(
+        "TRADE_DATE", sort=True
+    ).indices.values():
+        group = base.iloc[positions]
+        exposure_values = group[exposure_cols].to_numpy(
+            dtype=np.float64
+        )
+        exposure_valid = np.isfinite(exposure_values).all(axis=1)
+        if int(exposure_valid.sum()) < required_size:
+            continue
+        factor_values = group[factor_cols].to_numpy(dtype=np.float64)
+        mask_groups: dict[bytes, tuple[np.ndarray, list[int]]] = {}
+        for column_position in range(len(factor_cols)):
+            valid = exposure_valid & np.isfinite(
+                factor_values[:, column_position]
+            )
+            if int(valid.sum()) < required_size:
+                continue
+            key = valid.tobytes()
+            if key not in mask_groups:
+                mask_groups[key] = (valid, [])
+            mask_groups[key][1].append(column_position)
+
+        for valid, columns in mask_groups.values():
+            design = np.column_stack(
+                [
+                    np.ones(int(valid.sum()), dtype=np.float64),
+                    exposure_values[valid],
+                ]
+            )
+            targets = factor_values[np.ix_(valid, columns)]
+            residual = _ols_residual(design, targets)
+            row_positions = np.asarray(positions)[valid]
+            values_out[np.ix_(row_positions, columns)] = residual
+            moment = design.T @ residual / max(len(design), 1)
+            max_abs_moment = max(
+                max_abs_moment,
+                float(np.max(np.abs(moment))),
+            )
+
+    residualized = base[KEYS].copy()
+    for factor, position in factor_positions.items():
+        residualized[factor] = values_out[:, position]
+    invalid = [
+        factor
+        for factor in factor_cols
+        if residualized[factor].notna().sum() == 0
+    ]
+    residualized = residualized.dropna(
+        subset=factor_cols, how="all"
+    ).reset_index(drop=True)
+    return residualized, invalid, max_abs_moment
 
 
 def _rank_correlation(
@@ -292,7 +390,24 @@ def calculate_daily_spearman_ic(
         how="inner",
         validate="one_to_one",
     )
-    merged = merged.replace([np.inf, -np.inf], np.nan)
+    return _calculate_daily_ic_from_merged(
+        merged,
+        factor,
+        label_column,
+        min_cross_section,
+    )
+
+
+def _calculate_daily_ic_from_merged(
+    merged: pd.DataFrame,
+    factor: str,
+    label_column: str,
+    min_cross_section: int,
+) -> pd.DataFrame:
+    """Calculate daily IC when keys, factor and label are already aligned."""
+    merged = merged[KEYS + [factor, label_column]].replace(
+        [np.inf, -np.inf], np.nan
+    )
     merged = merged.dropna(subset=[factor, label_column])
     records: list[dict] = []
     for trade_date, group in merged.groupby("TRADE_DATE", sort=True):
@@ -398,60 +513,64 @@ def _process_year(
         how="inner",
         validate="one_to_one",
     )
-    factor_label_rows = len(
-        pd.merge(
-            factors[KEYS],
-            labels[KEYS],
-            on=KEYS,
-            how="inner",
-            validate="one_to_one",
-        )
+    factor_label = pd.merge(
+        factors,
+        labels,
+        on=KEYS,
+        how="inner",
+        validate="one_to_one",
     )
+    factor_label_rows = len(factor_label)
 
-    residual_series: list[pd.Series] = []
     daily_results: list[pd.DataFrame] = []
-    invalid_factors: list[str] = []
-    max_abs_moment = 0.0
-
-    for factor in factor_cols:
-        residualized, moment = _residualize_one_factor(
+    residualized_frame, invalid_factors, max_abs_moment = (
+        residualize_factor_matrix_by_date(
             factor_barra,
-            factor,
+            factor_cols,
             exposure_cols,
             min_cross_section,
         )
-        if residualized.empty:
-            invalid_factors.append(factor)
-            continue
-        max_abs_moment = max(max_abs_moment, moment)
-        residual_series.append(
-            residualized.set_index(KEYS)[factor].rename(factor)
-        )
+    )
+    evaluation = factor_label.merge(
+        residualized_frame,
+        on=KEYS,
+        how="left",
+        validate="one_to_one",
+        suffixes=("_RAW", "_NEUTRAL"),
+    )
 
-        raw_ic = calculate_daily_spearman_ic(
-            factors,
-            labels,
+    for factor in factor_cols:
+        residualized = residualized_frame[KEYS + [factor]].dropna(
+            subset=[factor]
+        )
+        if residualized.empty:
+            continue
+
+        raw_column = f"{factor}_RAW"
+        neutral_column = f"{factor}_NEUTRAL"
+        raw_frame = evaluation[
+            KEYS + [raw_column, label_column]
+        ].rename(columns={raw_column: factor})
+        neutral_frame = evaluation[
+            KEYS + [neutral_column, label_column]
+        ].rename(columns={neutral_column: factor})
+        matched_raw_frame = raw_frame.loc[
+            evaluation[neutral_column].notna()
+        ]
+        raw_ic = _calculate_daily_ic_from_merged(
+            raw_frame,
             factor,
             label_column,
             min_ic_cross_section,
         )
-        matched_raw = pd.merge(
-            residualized[KEYS],
-            factors[KEYS + [factor]],
-            on=KEYS,
-            how="left",
-            validate="one_to_one",
-        )
-        raw_matched_ic = calculate_daily_spearman_ic(
-            matched_raw,
-            labels,
+        raw_matched_ic = _calculate_daily_ic_from_merged(
+            matched_raw_frame,
             factor,
             label_column,
             min_ic_cross_section,
         )
-        neutral_ic = calculate_daily_spearman_ic(
-            residualized,
-            labels,
+        neutral_ic = _calculate_daily_ic_from_merged(
+            neutral_frame,
             factor,
             label_column,
             min_ic_cross_section,
@@ -465,14 +584,6 @@ def _process_year(
             )
         )
 
-    if residual_series:
-        residualized_frame = (
-            pd.concat(residual_series, axis=1)
-            .sort_index()
-            .reset_index()
-        )
-    else:
-        residualized_frame = pd.DataFrame(columns=KEYS)
     for factor in factor_cols:
         if factor not in residualized_frame:
             residualized_frame[factor] = np.nan
