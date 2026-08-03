@@ -44,6 +44,7 @@ TEST_DIRS = [
     "factor_test_output_quarterly_f_score",
     "factor_test_output_quarterly_indicators",
     "factor_test_output_raw_q1_minimal",
+    "factor_test_output_all_quarter_raw",
     "factor_test_output_secondary_priority",
     "factor_test_output_unreplicated_financial",
     "factor_test_output_updated_label_top_factors",
@@ -56,6 +57,7 @@ FACTOR_SOURCES = {
     "新增文献候选": "factor_components/unreplicated_financial_candidates.parquet",
     "单季度指标候选": "factor_components/quarterly_indicator_candidates.parquet",
     "原始少字段候选": "factor_components/raw_q1_minimal_candidates.parquet",
+    "全季度原始字段候选": "factor_components/all_quarter_raw_candidates.parquet",
 }
 
 EFFECTIVE_CODE = [
@@ -69,6 +71,7 @@ EFFECTIVE_CODE = [
     "secondary_priority_factors.py",
     "quarterly_indicator_factor_search.py",
     "raw_q1_minimal_factor_search.py",
+    "all_quarter_raw_factor_search.py",
     "gross_profitability_factor.py",
     "factors_neus_only.py",
 ]
@@ -84,6 +87,7 @@ INVALID_CODE = [
     "secondary_priority_factors.py",
     "quarterly_indicator_factor_search.py",
     "raw_q1_minimal_factor_search.py",
+    "all_quarter_raw_factor_search.py",
     "unreplicated_financial_factor_search.py",
     "factors_neus_only.py",
 ]
@@ -98,6 +102,7 @@ EFFECTIVE_DOCS = [
     "第二优先级复合因子说明.md",
     "单季度指标财务因子挖掘说明.md",
     "原始报表少字段因子挖掘说明.md",
+    "全季度原始字段因子说明.md",
     "已测试有效及潜在因子汇总.md",
     "毛利盈利因子复现说明.md",
     "因子中性化与IC测试说明.md",
@@ -113,6 +118,7 @@ INVALID_DOCS = [
     "第二优先级复合因子说明.md",
     "单季度指标财务因子挖掘说明.md",
     "原始报表少字段因子挖掘说明.md",
+    "全季度原始字段因子说明.md",
     "新增文献财务因子说明.md",
     "因子中性化与IC测试说明.md",
 ]
@@ -160,6 +166,7 @@ def refresh_robustness_files(base: Path) -> None:
         "factor_test_output_literature_financial",
         "factor_test_output_quarterly_indicators",
         "factor_test_output_raw_q1_minimal",
+        "factor_test_output_all_quarter_raw",
         "factor_test_output_unreplicated_financial",
         "factor_test_output_updated_label_top_factors",
     ]:
