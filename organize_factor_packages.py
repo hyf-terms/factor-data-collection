@@ -25,7 +25,7 @@ from pathlib import Path
 import pandas as pd
 import pyarrow.parquet as pq
 
-from factors_neus_only import summarize_ic
+from factors_neus_only2 import summarize_ic
 
 
 KEYS = ["TRADE_DATE", "SECURITY_ID"]
@@ -33,6 +33,9 @@ CONFIRMED_THRESHOLD = 0.035
 POTENTIAL_THRESHOLD = 0.030
 STABLE_FULL_THRESHOLD = 0.025
 STABLE_PERIOD_THRESHOLD = 0.020
+OUTPUT_ROOT = Path("输出与测试")
+TEST_RESULTS_ROOT = OUTPUT_ROOT / "测试结果"
+SUMMARY_RESULTS_ROOT = OUTPUT_ROOT / "汇总结果"
 
 TEST_DIRS = [
     "factor_test_output",
@@ -48,6 +51,13 @@ TEST_DIRS = [
     "factor_test_output_secondary_priority",
     "factor_test_output_unreplicated_financial",
     "factor_test_output_updated_label_top_factors",
+    "factor_test_output_coverage_literature_batch1",
+    "factor_test_output_coverage_literature_batch2",
+    "factor_test_output_coverage_literature_batch3a",
+    "factor_test_output_coverage_literature_batch3b",
+    "factor_test_output_q1_variance_optimized_notebook",
+    "factor_test_output_dense_q1_final",
+    "factor_test_output_dense_no_rank_final",
 ]
 
 FACTOR_SOURCES = {
@@ -58,6 +68,9 @@ FACTOR_SOURCES = {
     "单季度指标候选": "factor_components/quarterly_indicator_candidates.parquet",
     "原始少字段候选": "factor_components/raw_q1_minimal_candidates.parquet",
     "全季度原始字段候选": "factor_components/all_quarter_raw_candidates.parquet",
+    "高覆盖文献无R候选": "factor_components/coverage_literature_no_rank_candidates.parquet",
+    "稠密Q1毛利润复合": "factor_components/dense_q1_gross_profit_factors.parquet",
+    "稠密无R财务复合": "factor_components/dense_no_rank_factors.parquet",
 }
 
 EFFECTIVE_CODE = [
@@ -72,8 +85,12 @@ EFFECTIVE_CODE = [
     "quarterly_indicator_factor_search.py",
     "raw_q1_minimal_factor_search.py",
     "all_quarter_raw_factor_search.py",
+    "coverage_literature_factor_search.py",
+    "dense_q1_gross_profit_factors.py",
+    "dense_no_rank_factor_optimization.py",
     "gross_profitability_factor.py",
     "factors_neus_only.py",
+    "factors_neus_only2.py",
 ]
 
 INVALID_CODE = [
@@ -88,40 +105,20 @@ INVALID_CODE = [
     "quarterly_indicator_factor_search.py",
     "raw_q1_minimal_factor_search.py",
     "all_quarter_raw_factor_search.py",
+    "coverage_literature_factor_search.py",
+    "dense_q1_gross_profit_factors.py",
+    "dense_no_rank_factor_optimization.py",
     "unreplicated_financial_factor_search.py",
     "factors_neus_only.py",
+    "factors_neus_only2.py",
 ]
 
 EFFECTIVE_DOCS = [
-    "事件型财务因子说明.md",
-    "文献财务因子扩展说明.md",
-    "PEAD_SUE因子说明.md",
-    "季度F-score因子说明.md",
-    "第一批财务因子说明.md",
-    "第二批财务因子说明.md",
-    "第二优先级复合因子说明.md",
-    "单季度指标财务因子挖掘说明.md",
-    "原始报表少字段因子挖掘说明.md",
-    "全季度原始字段因子说明.md",
+    "有效及潜在因子运行说明.md",
     "已测试有效及潜在因子汇总.md",
-    "毛利盈利因子复现说明.md",
-    "因子中性化与IC测试说明.md",
 ]
 
-INVALID_DOCS = [
-    "毛利盈利因子复现说明.md",
-    "PEAD_SUE因子说明.md",
-    "季度F-score因子说明.md",
-    "Mohanram_G-score因子说明.md",
-    "第一批财务因子说明.md",
-    "第二批财务因子说明.md",
-    "第二优先级复合因子说明.md",
-    "单季度指标财务因子挖掘说明.md",
-    "原始报表少字段因子挖掘说明.md",
-    "全季度原始字段因子说明.md",
-    "新增文献财务因子说明.md",
-    "因子中性化与IC测试说明.md",
-]
+INVALID_DOCS: list[str] = []
 
 LIGHT_TEST_FILES = [
     "daily_ic.parquet",
@@ -131,6 +128,7 @@ LIGHT_TEST_FILES = [
     "robustness_by_period.csv",
     "robustness_by_period.parquet",
     "run_metadata.json",
+    "strict_factor_eligibility.csv",
 ]
 
 
@@ -170,7 +168,7 @@ def refresh_robustness_files(base: Path) -> None:
         "factor_test_output_unreplicated_financial",
         "factor_test_output_updated_label_top_factors",
     ]:
-        directory = base / name
+        directory = base / TEST_RESULTS_ROOT / name
         daily_path = directory / "daily_ic.parquet"
         if not daily_path.exists():
             continue
@@ -202,7 +200,7 @@ def align_all_test_results_to_current_label(base: Path) -> pd.Timestamp:
         raise ValueError("label.parquet has no valid TRADE_DATE")
 
     for name in TEST_DIRS:
-        directory = base / name
+        directory = base / TEST_RESULTS_ROOT / name
         daily_path = directory / "daily_ic.parquet"
         if not daily_path.exists():
             continue
@@ -245,7 +243,7 @@ def collect_latest_results(base: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     summary_pieces: list[pd.DataFrame] = []
     period_pieces: list[pd.DataFrame] = []
     for name in TEST_DIRS:
-        directory = base / name
+        directory = base / TEST_RESULTS_ROOT / name
         summary_path = directory / "ic_summary.parquet"
         daily_path = directory / "daily_ic.parquet"
         if not summary_path.exists():
@@ -439,6 +437,34 @@ def _copy_named_files(base: Path, names: list[str], target: Path) -> None:
             shutil.copy2(source, target / source.name)
 
 
+def _replace_markdown_docs(base: Path, names: list[str], target: Path) -> None:
+    """Replace packaged Markdown docs so removed guides cannot reappear."""
+    target.mkdir(parents=True, exist_ok=True)
+    for path in target.glob("*.md"):
+        path.unlink()
+    _copy_named_files(base, names, target)
+
+
+def validate_factor_summary(base: Path, catalog: pd.DataFrame) -> None:
+    """Require the maintained summary to cover every retained factor."""
+    summary_path = base / "已测试有效及潜在因子汇总.md"
+    if not summary_path.exists():
+        raise FileNotFoundError(f"缺少因子汇总: {summary_path}")
+    summary = summary_path.read_text(encoding="utf-8")
+    retained = catalog.loc[
+        catalog["classification"].str.startswith(("已", "潜在")),
+        "factor",
+    ]
+    missing = [factor for factor in retained if f"`{factor}`" not in summary]
+    if missing:
+        preview = "、".join(missing[:10])
+        suffix = "……" if len(missing) > 10 else ""
+        raise RuntimeError(
+            "因子汇总尚未加入全部有效/潜在因子，请先更新"
+            f"《已测试有效及潜在因子汇总.md》: {preview}{suffix}"
+        )
+
+
 def copy_light_test_results(
     base: Path,
     catalog: pd.DataFrame,
@@ -453,7 +479,7 @@ def copy_light_test_results(
     )
     invalid_factors = set(catalog["factor"]) - effective_factors
     for name in TEST_DIRS:
-        source_dir = base / name
+        source_dir = base / TEST_RESULTS_ROOT / name
         summary_path = source_dir / "ic_summary.parquet"
         if not summary_path.exists():
             continue
@@ -502,6 +528,22 @@ def copy_light_test_results(
                 )
                 robustness.to_parquet(
                     destination / "robustness_by_period.parquet",
+                    index=False,
+                )
+
+            quality_path = source_dir / "factor_quality_diagnostics.parquet"
+            if quality_path.exists():
+                quality = pd.read_parquet(quality_path)
+                quality = quality.loc[
+                    quality["factor"].isin(selected)
+                ].copy()
+                quality.to_csv(
+                    destination / "factor_quality_diagnostics.csv",
+                    index=False,
+                    encoding="utf-8-sig",
+                )
+                quality.to_parquet(
+                    destination / "factor_quality_diagnostics.parquet",
                     index=False,
                 )
 
@@ -598,18 +640,21 @@ def organize(base: Path) -> None:
     refresh_robustness_files(base)
     summaries, periods = collect_latest_results(base)
     catalog = build_catalog(base, summaries, periods)
+    validate_factor_summary(base, catalog)
+    summary_dir = base / SUMMARY_RESULTS_ROOT
+    summary_dir.mkdir(parents=True, exist_ok=True)
     catalog.to_csv(
-        base / "因子分类总表.csv",
+        summary_dir / "因子分类总表.csv",
         index=False,
         encoding="utf-8-sig",
     )
-    catalog.to_parquet(base / "因子分类总表.parquet", index=False)
+    catalog.to_parquet(summary_dir / "因子分类总表.parquet", index=False)
 
     write_factor_data(base, catalog, effective_dir, invalid_dir)
     _copy_named_files(base, EFFECTIVE_CODE, effective_dir / "构造程序")
     _copy_named_files(base, INVALID_CODE, invalid_dir / "构造程序")
-    _copy_named_files(base, EFFECTIVE_DOCS, effective_dir / "说明文档")
-    _copy_named_files(base, INVALID_DOCS, invalid_dir / "说明文档")
+    _replace_markdown_docs(base, EFFECTIVE_DOCS, effective_dir / "说明文档")
+    _replace_markdown_docs(base, INVALID_DOCS, invalid_dir / "说明文档")
     copy_light_test_results(base, catalog, effective_dir, invalid_dir)
     write_readmes(catalog, effective_dir, invalid_dir)
 

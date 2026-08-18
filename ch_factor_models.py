@@ -31,7 +31,7 @@ import pyarrow.dataset as ds
 
 PROJECT_DIR = Path(__file__).resolve().parent
 DEFAULT_INPUT_DIR = PROJECT_DIR / "data" / "ch_models"
-DEFAULT_OUTPUT_DIR = PROJECT_DIR / "outputs" / "ch_models"
+DEFAULT_OUTPUT_DIR = PROJECT_DIR / "输出与测试" / "模型输出" / "ch_models"
 DEFAULT_START_DATE = "2017-01-01"
 DEFAULT_END_DATE = pd.Timestamp.today().normalize()
 

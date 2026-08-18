@@ -75,6 +75,29 @@ class AllQuarterRawFactorSearchTest(unittest.TestCase):
             ).all()
         )
 
+    def test_latest_quarter_candidates_extend_availability_to_120_days(self):
+        row = {
+            "TRADE_DATE": pd.Timestamp("2024-08-20"),
+            "SECURITY_ID": 1,
+            "AVAILABLE_DATE": pd.Timestamp("2024-04-22"),
+            "FISCAL_QUARTER": 1,
+            "QUARTER_INDEX": 2024 * 4 + 1,
+            "EVENT_AGE": 80,
+        }
+        row.update({signal: 0.2 for signal in SIGNAL_COLUMNS})
+        result = build_candidates_for_slice(pd.DataFrame([row]))
+        self.assertTrue(
+            np.isnan(result["q1_raw_metric_gross_profit_growth_60d"].iloc[0])
+        )
+        self.assertAlmostEqual(
+            float(
+                result[
+                    "latestq_raw_metric_gross_profit_growth_120d"
+                ].iloc[0]
+            ),
+            0.2,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

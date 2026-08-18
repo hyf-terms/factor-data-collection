@@ -1,47 +1,42 @@
-# Factor Data Collection
+# A股财务因子研究与严格测试
 
-用于下载 A 股新准则财务 PIT 数据、构建财务因子，并在 Barra 中性化后检验每日 Spearman IC。
+本项目从通联新准则PIT财务数据构造A股财务因子，使用逐日Barra截面回归残差与未来10个交易日标签计算Spearman IC，并从达标因子中筛选低相关组合。
 
-## 主要模块
+## 当前结论
 
-- `download_new_pit.py`：通过数据接口下载三张 PIT 表并保存为分区 Parquet。
-- `download_new_pit_mysql.py`：从 MySQL 数据库读取 PIT 表并保存到本地。
-- `download_quarterly_financial_indicators.py`：下载新准则单季度财务指标 PIT，并输出完整字段字典。
-- `gross_profitability_factor.py`：毛利盈利因子。
-- `pead_sue_factor.py`：PEAD / SUE 盈余惊喜因子。
-- `quarterly_f_score.py`：季度 Piotroski F-score。
-- `mohanram_g_score.py`：Mohanram G-score。
-- `fundamental_priority_factors.py`：经营利润增长、经营利润加速度、CFO SUE、应计质量。
-- `fundamental_priority_factors_part2.py`：资产增长、投资率、应收与存货异常增长。
-- `secondary_priority_factors.py`：盈利质量、管理层误定价、应计及非经常损益、基本面动量复合因子。
-- `event_financial_factor_search.py`：构建 Q1 盈余惊喜、扣非盈余惊喜及事件条件财务复合候选。
-- `literature_financial_factor_search.py`：复现收入/利润惊喜、联合惊喜、惊喜持续性并生成受约束的复合参数变体。
-- `unreplicated_financial_factor_search.py`：复现净经营资产、杜邦分解、研发强度、资本开支和盈利稳定性等新增文献候选。
-- `quarterly_indicator_factor_search.py`：利用单季度财务指标PIT挖掘现金质量、增长确认、回款和偿债候选。
-- `raw_q1_minimal_factor_search.py`：直接用三张原始报表的少量字段构造Q1基础指标和复合候选。
-- `all_quarter_raw_factor_search.py`：把累计报表拆成Q1—Q4单季度值，构造尽量不使用百分位排名的全季度原始字段候选。
-- `ch_factor_models.py`：中国市场 CH-3、CH-4 模型复现。
-- `factors_neus_only.py`：合并因子、Barra 和标签，逐日残差化并计算 IC。
-- `organize_factor_packages.py`：按最新中性化 IC 将因子、代码、说明和轻量测试结果整理到“有效因子/无效因子”目录。
+- 正式测试程序为 `factors_neus_only2.py`；旧版 `factors_neus_only.py` 仅用于复现历史稀疏结果。
+- 正式稠密因子必须覆盖共同股票池的每个交易日，不能跳过缺失、恒定或低方差横截面。
+- `|平均IC| >= 0.035` 为有效，`0.030 <= |平均IC| < 0.035` 为潜在有效。
+- 当前严格达标代表因子共7个，最高为 `r43_profitability_persistence_confirmation_equal6`，严格IC为0.03724。
+- 达标因子的每日IC10序列绝对相关性为0.8450—0.9995。按IC降序、相关性严格低于0.85的贪心规则，最终只保留第43轮因子。
+- 后续测试的债务、税务、审计、披露、合同、子公司、现金流风险等独立方向均未新增IC达到0.03的稠密因子。
 
-## 数据口径
+## 核心文档
 
-| 报表 | 数据源表示例 | 本地数据集 |
-|---|---|---|
-| 资产负债表 | `vw_fdmt_bs_new` | `new_pit_balance` |
-| 利润表 | `vw_fdmt_is_new` | `new_pit_income` |
-| 现金流量表 | `vw_fdmt_cf_new` | `new_pit_cashflow` |
+1. [研究方法与测试规范](研究方法与测试规范.md)：PIT、稠密化、Barra中性化、IC与防过拟合规则。
+2. [有效因子与最终结果](有效因子与最终结果.md)：达标因子、潜在因子、相关性和最终选择。
+3. [运行与数据获取](运行与数据获取.md)：数据下载、因子构造、正式测试及贪心筛选命令。
 
-构造程序保留披露时间和修订记录，以首次可用时间形成严格 PIT 数据。默认数据、因子组件和测试结果均保存在本地，不进入 Git。
+历史逐轮Markdown已合并到上述文档。各轮代码仍保留在仓库根目录，便于复现；本地Parquet、测试产物、数据库配置和日志均由 `.gitignore` 排除。
 
-## 快速测试
+## 关键程序
+
+| 功能 | 程序 |
+|---|---|
+| 三张新准则PIT下载 | `download_new_pit.py`、`download_new_pit_mysql.py` |
+| 通用MySQL表导出Parquet | `download_mysql_table_parquet.py` |
+| 正式Barra中性化与IC | `factors_neus_only2.py` |
+| 稠密候选填充检查 | `prepare_strict_neutral_fill.py`、`prepare_round65_69_strict_dense.py` |
+| 达标因子公共池 | `build_existing_effective_factor_pool.py` |
+| 每日IC贪心筛选 | `greedy_ic_factor_selector.py` |
+| 因子残差横截面相关性 | `factor_correlation_check.py` |
+
+## 快速校验
 
 ```powershell
-python -m pytest
+python -m pytest -q
 ```
 
-每个模块的字段映射、计算口径和命令行示例见对应中文说明文档。
+## 安全约束
 
-## 安全说明
-
-仓库不保存真实账号、数据库密码、Parquet 数据或日志。请复制 `new_pit.env.example` 或 `new_pit_db_local.example.py`，在被 Git 忽略的本地文件中填写连接信息。
+仓库不保存账号、密码、原始Parquet或日志。请从 `new_pit.env.example` 或 `new_pit_db_local.example.py` 创建仅本地使用的配置文件。

@@ -419,7 +419,9 @@ def append_factors_atomically(
     if len(updated) != len(existing):
         raise RuntimeError("加入第二批四因子后factors.parquet行数变化")
 
-    backup = path.with_name(
+    backup_dir = path.parent / "输出与测试" / "因子备份"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup = backup_dir / (
         f"{path.stem}_before_priority_financial_factors_part2{path.suffix}"
     )
     if not backup.exists():

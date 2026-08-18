@@ -20,6 +20,7 @@ venv/
 data/
 arcticdb/
 *.parquet
+artifacts/round55/source_data/
 *.feather
 *.csv
 *.tsv
@@ -33,6 +34,9 @@ arcticdb/
 # Logs and local outputs
 *.log
 outputs/
+输出与测试/
+日志/
 tmp/
 factor_components/
 factor_test_output*/
+artifacts/

@@ -4,3 +4,4 @@ pyarrow>=12
 python-dotenv>=1.0
 requests>=2.31
 mysqlclient>=2.2
+pytest>=8.0

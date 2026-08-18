@@ -536,9 +536,9 @@ def append_factor_atomically(
     if len(updated) != len(existing):
         raise RuntimeError("合并后 factors.parquet 行数发生变化")
 
-    backup = path.with_name(
-        f"{path.stem}_before_pead_sue{path.suffix}"
-    )
+    backup_dir = path.parent / "输出与测试" / "因子备份"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup = backup_dir / f"{path.stem}_before_pead_sue{path.suffix}"
     if not backup.exists():
         shutil.copy2(path, backup)
     temporary = path.with_suffix(path.suffix + ".tmp")

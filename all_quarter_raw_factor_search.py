@@ -26,6 +26,7 @@ from raw_q1_minimal_factor_search import _safe_divide
 
 BASE_DIR = Path(__file__).resolve().parent
 EVENT_WINDOW = 60
+LATEST_QUARTER_WINDOW = 120
 INCOME_FIELDS = ["REVENUE", "COGS", "N_INCOME_ATTR_P", "R_D_EXP"]
 CASHFLOW_FIELDS = [
     "N_CF_OPERATE_A",
@@ -75,10 +76,15 @@ QUARTER_CANDIDATES = [
     for quarter in range(1, 5)
     for signal in QUARTER_SIGNALS
 ]
+OPTIMIZED_CANDIDATES = [
+    "latestq_raw_metric_gross_profit_growth_120d",
+    "latestq_raw_metric_rd_growth_efficiency_120d",
+]
 CANDIDATE_COLUMNS = [
     *DIRECT_CANDIDATES.values(),
     *COMPOSITE_CANDIDATES,
     *QUARTER_CANDIDATES,
+    *OPTIMIZED_CANDIDATES,
 ]
 
 
@@ -284,6 +290,9 @@ def build_candidates_for_slice(mapped: pd.DataFrame) -> pd.DataFrame:
         ),
     }
     valid = data["EVENT_AGE"].ge(0) & data["EVENT_AGE"].lt(EVENT_WINDOW)
+    latest_quarter_valid = data["EVENT_AGE"].ge(0) & data["EVENT_AGE"].lt(
+        LATEST_QUARTER_WINDOW
+    )
     result = data[KEYS].copy()
     for signal, candidate in DIRECT_CANDIDATES.items():
         result[candidate] = data[signal].where(valid)
@@ -302,6 +311,16 @@ def build_candidates_for_slice(mapped: pd.DataFrame) -> pd.DataFrame:
                 else composites[signal]
             )
             result[name] = values.where(quarter_mask)
+    # Dense alternatives to the Q1-only event factors.  They use the newest
+    # disclosed standalone quarter (Q1-Q4) and remain valid for 120 trading
+    # days, which removes the long all-NaN gaps without injecting artificial
+    # jitter into a naturally stepwise fundamental signal.
+    result["latestq_raw_metric_gross_profit_growth_120d"] = data[
+        "GROSS_PROFIT_GROWTH"
+    ].where(latest_quarter_valid)
+    result["latestq_raw_metric_rd_growth_efficiency_120d"] = composites[
+        "RD_GROWTH_EFFICIENCY"
+    ].where(latest_quarter_valid)
     for column in CANDIDATE_COLUMNS:
         result[column] = pd.to_numeric(
             result[column], errors="coerce"

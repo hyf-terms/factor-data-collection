@@ -675,7 +675,9 @@ def append_factors_atomically(
     if len(updated) != len(existing):
         raise RuntimeError("加入第二优先级因子后行数发生变化")
 
-    backup = path.with_name(
+    backup_dir = path.parent / "输出与测试" / "因子备份"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup = backup_dir / (
         f"{path.stem}_before_secondary_priority_factors{path.suffix}"
     )
     if not backup.exists():
